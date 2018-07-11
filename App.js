@@ -1,22 +1,20 @@
 import React from "react";
 import moment from "moment";
-import { SQLite } from "expo";
 import {
   Alert,
   ActionSheetIOS,
   StatusBar,
   Share,
-  Modal,
-  DatePickerIOS,
   StyleSheet,
-  Button,
   Text,
   TextInput,
   View,
   TouchableOpacity
 } from "react-native";
 
-const db = SQLite.openDatabase("dailytime-1.db");
+import CalendarSquare from "./CalendarSquare.js";
+import TimePickerModal from "./TimePickerModal.js";
+import Database from "./Database.js";
 
 export default class App extends React.Component {
   constructor(props) {
@@ -171,90 +169,41 @@ export default class App extends React.Component {
     );
   }
 
-  getTimePickerModal(date, dateChangeFn, isVisible, buttonTitle, buttonAction) {
-    // mode="time"
-    return (
-      <Modal
-        animationType="slide"
-        transparent={true}
-        visible={isVisible}
-        onRequestClose={() => {}}
-      >
-        <View style={{ justifyContent: "flex-end", height: "100%" }}>
-          <View
-            style={{ opacity: 1, backgroundColor: "white", paddingBottom: 8 }}
-          >
-            <DatePickerIOS
-              onDateChange={dateChangeFn}
-              date={date}
-              minuteInterval={5}
-            />
-            <Button onPress={buttonAction} title={buttonTitle} />
-          </View>
-        </View>
-      </Modal>
-    );
-  }
-
   getHistoryElem() {
-    const nowMoment = moment();
-    const nowDay = nowMoment.day(); // Sunday is 0, Sat is 6
-    // Find the day corresponding to two Sundays ago
-    const dayStyle = { height: 50, width: 42, textAlign: "center" };
     const daysElems = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map(str => {
-      const style = { height: 50, width: 42, textAlign: "center" };
+      const style = { height: 24, width: 45, textAlign: "center" };
       return (
         <Text key={str} style={style}>
           {str}
         </Text>
       );
     });
-    const firstWeek = [];
-    const secondWeek = [];
     const data = JSON.parse(this.state.allRows);
-    const map = {};
+    const rowsByTarget = {};
     for (let i = 0; i < data.length; i++) {
       const row = data[i];
-      map[row.targetShortDate] = row;
+      rowsByTarget[row.targetShortDate] = row;
     }
-    for (let diff = 7 + nowDay; diff > nowDay; diff -= 1) {
+    const firstWeek = [];
+    const secondWeek = [];
+    const nowMoment = moment();
+    const nowDay = nowMoment.day(); // Sunday is 0, Sat is 6
+    // Start with the day two Sundays ago
+    for (let diff = 7 + nowDay; diff >= 0; diff -= 1) {
       const entryMoment = nowMoment.clone().subtract(diff, "days");
-      const matching = map[shortFormat(entryMoment)];
-      const style = Object.assign({}, dayStyle);
+      const matching = rowsByTarget[shortFormat(entryMoment)];
+      const week = diff > nowDay ? firstWeek : secondWeek;
       if (matching) {
-        style.color = matching.success ? "green" : "red";
-        firstWeek.push(
-          <Text style={style} key={matching.id}>
-            {moment(matching.logDate).format("h:mm a")}
-          </Text>
+        week.push(
+          <CalendarSquare
+            key={matching.id}
+            success={Boolean(matching.success)}
+            date={matching.logDate}
+          />
         );
       } else {
-        style.color = "gray";
-        firstWeek.push(
-          <Text style={style} key={shortFormat(entryMoment)}>
-            n/a
-          </Text>
-        );
-      }
-    }
-    for (let diff = nowDay; diff >= 0; diff -= 1) {
-      const entryMoment = nowMoment.clone().subtract(diff, "days");
-      const matching = map[shortFormat(entryMoment)];
-      const style = Object.assign({}, dayStyle);
-
-      if (matching) {
-        style.color = matching.success ? "green" : "red";
-        secondWeek.push(
-          <Text style={style} key={matching.id}>
-            {moment(matching.logDate).format("h:mm a")}
-          </Text>
-        );
-      } else {
-        style.color = "gray";
-        secondWeek.push(
-          <Text style={style} key={shortFormat(entryMoment)}>
-            n/a
-          </Text>
+        week.push(
+          <CalendarSquare key={shortFormat(entryMoment)} date={null} />
         );
       }
     }
@@ -277,29 +226,33 @@ export default class App extends React.Component {
   }
 
   render() {
-    const targetDatePickerModal = this.getTimePickerModal(
-      this.state.targetDate,
-      this.setTargetDate,
-      this.state.targetDateModalVisible,
-      "Dismiss",
-      () => {
-        this.setTargetDateModalVisible(!this.state.targetDateModalVisible);
-      },
-      "Dismiss"
+    const targetDatePickerModal = (
+      <TimePickerModal
+        date={this.state.targetDate}
+        dateChangeFn={this.setTargetDate}
+        isVisible={this.state.targetDateModalVisible}
+        buttonTitle={"Dismiss"}
+        buttonAction={() => {
+          this.setTargetDateModalVisible(!this.state.targetDateModalVisible);
+        }}
+      />
     );
-    const logDatePickerModal = this.getTimePickerModal(
-      this.state.logDate,
-      this.setLogDate,
-      this.state.logDateModalVisible,
-      "Save",
-      () => {
-        this.setLogDateModalVisible(!this.state.logDateModalVisible, () => {
-          setTimeout(() => {
-            this._logTime();
-          }, 1000); // Delay a bit, weird race with the modal.
-        });
-      }
+    const logDatePickerModal = (
+      <TimePickerModal
+        date={this.state.logDate}
+        dateChangeFn={this.setLogDate}
+        isVisible={this.state.logDateModalVisible}
+        buttonTitle={"Save"}
+        buttonAction={() => {
+          this.setLogDateModalVisible(!this.state.logDateModalVisible, () => {
+            setTimeout(() => {
+              this._logTime();
+            }, 1000); // Delay a bit, weird race with the modal.
+          });
+        }}
+      />
     );
+
     return (
       <View style={styles.container}>
         {targetDatePickerModal}
@@ -398,121 +351,6 @@ const styles = StyleSheet.create({
 });
 
 const shortFormat = momentItem => momentItem.format("MM-DD-YYYY");
-
-class Database {
-  static queryByTargetShortDate(targetShort, callback) {
-    db.transaction(tx => {
-      tx.executeSql(
-        `select * from entries where targetShortDate = ?;`,
-        [targetShort],
-        (_, { rows: { _array } }) => {
-          callback(_array);
-        }
-      );
-    });
-  }
-
-  static initTable(updateFn) {
-    db.transaction(
-      tx => {
-        // Database.deleteTable();
-        tx.executeSql(
-          "create table if not exists entries (id integer primary key not null, logDate text, targetDate text, logShortDate text, targetShortDate text, success int);"
-        );
-      },
-      null,
-      updateFn
-    );
-  }
-
-  static deleteTable() {
-    db.transaction(tx => {
-      tx.executeSql("drop table entries");
-    });
-  }
-
-  static add(
-    logDate,
-    targetDate,
-    logShortDate,
-    targetShortDate,
-    success,
-    updateFn
-  ) {
-    db.transaction(
-      tx => {
-        this._executeInsert(
-          tx,
-          logDate,
-          targetDate,
-          logShortDate,
-          targetShortDate,
-          success
-        );
-      },
-      e => {
-        console.error(e);
-      },
-      updateFn
-    );
-  }
-
-  static upsert(
-    logDate,
-    targetDate,
-    logShortDate,
-    targetShortDate,
-    success,
-    updateFn
-  ) {
-    db.transaction(
-      tx => {
-        this._executeDelete(tx, targetShortDate);
-        this._executeInsert(
-          tx,
-          logDate,
-          targetDate,
-          logShortDate,
-          targetShortDate,
-          success
-        );
-      },
-      e => {
-        console.error(e);
-      },
-      updateFn
-    );
-  }
-
-  static getAll(callback) {
-    db.transaction(tx => {
-      tx.executeSql("select * from entries", [], (_, { rows }) => {
-        console.log(rows);
-        callback(rows._array);
-      });
-    });
-  }
-
-  static _executeInsert(
-    tx,
-    logDate,
-    targetDate,
-    logShortDate,
-    targetShortDate,
-    success
-  ) {
-    tx.executeSql(
-      "insert into entries (logDate, targetDate, logShortDate, targetShortDate, success) values (?, ?, ?, ?, ?)",
-      [logDate, targetDate, logShortDate, targetShortDate, success]
-    );
-  }
-
-  static _executeDelete(tx, targetShortDate) {
-    tx.executeSql(`delete from entries where targetShortDate = ?;`, [
-      targetShortDate
-    ]);
-  }
-}
 
 const kExcludedActivities = [
   "com.apple.UIKit.activity.PostToFacebook",
