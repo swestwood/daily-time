@@ -321,7 +321,9 @@ const styles = StyleSheet.create({
     minHeight: 120,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "lightgreen"
+    // backgroundColor: "#DAE3E2"
+    backgroundColor: "#D2D3DC"
+    // backgroundColor: "#C4AD99"
   },
   historyContainer: {
     flex: 8,
@@ -332,7 +334,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     height: 200,
-    backgroundColor: "lightblue"
+    // backgroundColor: "#2B4623"
+    backgroundColor: "#2C3F5B"
+    // backgroundColor: "#1586D8"
   },
   logButtonContainer: {
     alignItems: "center",
