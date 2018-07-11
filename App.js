@@ -77,7 +77,7 @@ export default class App extends React.Component {
     const logMoment = moment(this.state.logDate);
     const targetMoment = moment(this.state.targetDate);
     const success = logMoment.isSameOrBefore(targetMoment);
-    Database.add(
+    Database.upsert(
       logMoment.toISOString(),
       targetMoment.toISOString(),
       shortFormat(logMoment),
@@ -441,9 +441,40 @@ class Database {
   ) {
     db.transaction(
       tx => {
-        tx.executeSql(
-          "insert into entries (logDate, targetDate, logShortDate, targetShortDate, success) values (?, ?, ?, ?, ?)",
-          [logDate, targetDate, logShortDate, targetShortDate, success]
+        this._executeInsert(
+          tx,
+          logDate,
+          targetDate,
+          logShortDate,
+          targetShortDate,
+          success
+        );
+      },
+      e => {
+        console.error(e);
+      },
+      updateFn
+    );
+  }
+
+  static upsert(
+    logDate,
+    targetDate,
+    logShortDate,
+    targetShortDate,
+    success,
+    updateFn
+  ) {
+    db.transaction(
+      tx => {
+        this._executeDelete(tx, targetShortDate);
+        this._executeInsert(
+          tx,
+          logDate,
+          targetDate,
+          logShortDate,
+          targetShortDate,
+          success
         );
       },
       e => {
@@ -460,6 +491,26 @@ class Database {
         callback(rows._array);
       });
     });
+  }
+
+  static _executeInsert(
+    tx,
+    logDate,
+    targetDate,
+    logShortDate,
+    targetShortDate,
+    success
+  ) {
+    tx.executeSql(
+      "insert into entries (logDate, targetDate, logShortDate, targetShortDate, success) values (?, ?, ?, ?, ?)",
+      [logDate, targetDate, logShortDate, targetShortDate, success]
+    );
+  }
+
+  static _executeDelete(tx, targetShortDate) {
+    tx.executeSql(`delete from entries where targetShortDate = ?;`, [
+      targetShortDate
+    ]);
   }
 }
 
